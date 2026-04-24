@@ -4,6 +4,7 @@ import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { TriggerScrapeCommand } from '../application/commands/trigger-scrape.command';
 import { TriggerScrapeNewsCommand } from '../application/commands/trigger-scrape-news.command';
 import { GetScrapedProductsQuery } from '../application/queries/get-scraped-products.query';
+import { GetScrapedNewsQuery } from '../application/queries/get-scraped-news.query';
 import { TriggerScrapeDto } from './dto/trigger-scrape.dto';
 import { TriggerScrapeNewsDto } from './dto/trigger-scrape-news.dto';
 import { TriggerScrapeHandler } from '../application/commands/trigger-scrape.handler';
@@ -51,6 +52,13 @@ export class ScraperController {
   @ApiResponse({ status: 200, description: 'Trả về Entity Model hiện tại' })
   async getProducts() {
     return this.queryBus.execute(new GetScrapedProductsQuery());
+  }
+
+  @Get('news')
+  @ApiOperation({ summary: 'CQRS QUERY: Lấy Query Model danh sách tin tức' })
+  @ApiResponse({ status: 200, description: 'Trả về Entity Model hiện tại (Lọc những bài có giá = 0)' })
+  async getNews() {
+    return this.queryBus.execute(new GetScrapedNewsQuery());
   }
 
   @Delete('cache')

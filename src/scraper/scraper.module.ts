@@ -6,12 +6,13 @@ import { HttpScraperService } from './infrastructure/http/http-scraper.service';
 import { TriggerScrapeHandler } from './application/commands/trigger-scrape.handler';
 import { TriggerScrapeNewsHandler } from './application/commands/trigger-scrape-news.handler';
 import { GetScrapedProductsHandler } from './application/queries/get-scraped-products.handler';
+import { GetScrapedNewsHandler } from './application/queries/get-scraped-news.handler';
 import { ProductScrapedEventHandler } from './application/events/product-scraped.handler';
 import { InMemoryProductRepository } from './infrastructure/repositories/in-memory-product.repository';
 import { IProductRepositoryToken } from './domain/repositories/product.repository.interface';
 
 const CommandHandlers = [TriggerScrapeHandler, TriggerScrapeNewsHandler];
-const QueryHandlers = [GetScrapedProductsHandler];
+const QueryHandlers = [GetScrapedProductsHandler, GetScrapedNewsHandler];
 const EventHandlers = [ProductScrapedEventHandler];
 
 @Module({
