@@ -6,11 +6,12 @@ import { ConfigModule } from '@nestjs/config';
 import { WpApiService } from './infrastructure/wp-api.service';
 import { SyncProductToWpHandler } from './application/commands/sync-product-to-wp.handler';
 import { BulkSyncToWpHandler } from './application/commands/bulk-sync-to-wp.handler';
+import { SyncNewsToWpHandler } from './application/commands/sync-news-to-wp.handler';
 import { GetPendingSyncHandler } from './application/queries/get-pending-sync.handler';
 import { WordPressController } from './presentation/wordpress.controller';
 import { ScraperModule } from '../scraper/scraper.module';
 
-const CommandHandlers = [SyncProductToWpHandler, BulkSyncToWpHandler];
+const CommandHandlers = [SyncProductToWpHandler, BulkSyncToWpHandler, SyncNewsToWpHandler];
 const QueryHandlers = [GetPendingSyncHandler];
 
 @Module({

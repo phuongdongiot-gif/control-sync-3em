@@ -257,4 +257,158 @@ export class WpApiService {
       throw new Error(`Lỗi WooCommerce: ${errMsg}`);
     }
   }
+
+  // ====================================================================
+  // PUSH NEWS TO WP POSTS
+  // ====================================================================
+
+  async resolveWpCategoryForPost(categoryName: string, user: string, pass: string, url: string): Promise<number | null> {
+    const endpoint = `${url.replace(/\/$/, '')}/wp-json/wp/v2/categories`;
+    const authHeader = 'Basic ' + Buffer.from(user + ':' + pass).toString('base64');
+    const normalizedTarget = categoryName.trim().toLowerCase();
+
+    try {
+      this.logger.debug(`Đang tìm danh mục WP Post: "${categoryName}"`);
+      const searchResp = await lastValueFrom(
+        this.httpService.get(`${endpoint}?search=${encodeURIComponent(categoryName)}&per_page=20`, {
+          headers: { Authorization: authHeader },
+        })
+      );
+
+      if (searchResp.data && searchResp.data.length > 0) {
+        const exactMatch = searchResp.data.find(
+          (cat: { id: number; name: string }) =>
+            cat.name.trim().toLowerCase() === normalizedTarget
+        );
+        if (exactMatch) {
+          this.logger.log(`✅ Tìm thấy danh mục WP Post chính xác: "${exactMatch.name}" (ID: ${exactMatch.id})`);
+          return exactMatch.id;
+        }
+      }
+
+      this.logger.log(`🆕 Tự động tạo danh mục WP Post mới: "${categoryName}"`);
+      const createResp = await lastValueFrom(
+        this.httpService.post(endpoint, { name: categoryName }, {
+          headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
+        })
+      );
+      this.logger.log(`✅ Đã tạo danh mục WP Post mới (ID: ${createResp.data.id}): "${categoryName}"`);
+      return createResp.data.id;
+    } catch (err: any) {
+      this.logger.error(`❌ Lỗi resolveWpCategoryForPost "${categoryName}": ${err.message}`);
+      return null;
+    }
+  }
+
+  async checkPostExistsOnWp(postTitle: string, user: string, pass: string, url: string): Promise<number | null> {
+    const endpoint = `${url.replace(/\/$/, '')}/wp-json/wp/v2/posts`;
+    const authHeader = 'Basic ' + Buffer.from(user + ':' + pass).toString('base64');
+    const normalizedTitle = postTitle.trim().toLowerCase();
+
+    try {
+      const resp = await lastValueFrom(
+        this.httpService.get(
+          `${endpoint}?search=${encodeURIComponent(postTitle)}&per_page=10&status=any`,
+          { headers: { Authorization: authHeader } }
+        )
+      );
+
+      if (resp.data && resp.data.length > 0) {
+        // In WP v2 posts, title is an object: { rendered: '...' }
+        const match = resp.data.find(
+          (p: { id: number; title: { rendered: string } }) => {
+            // Unescape HTML entities from rendered title before comparing
+            const renderedTitle = p.title.rendered.replace(/&#(\d+);/g, (m, dec) => String.fromCharCode(dec)).trim().toLowerCase();
+            return renderedTitle === normalizedTitle || p.title.rendered.trim().toLowerCase() === normalizedTitle;
+          }
+        );
+        if (match) {
+          this.logger.warn(`⚠️ Bài viết "${postTitle}" đã tồn tại trên WordPress (ID: ${match.id}).`);
+          return match.id;
+        }
+      }
+      return null;
+    } catch (err: any) {
+      this.logger.warn(`⚠️ Không thể kiểm tra trùng lặp WP Post: ${err.message} → tiếp tục push.`);
+      return null;
+    }
+  }
+
+  async pushPostToWordPress(product: Product): Promise<any> {
+    const url = this.configService.get<string>('WP_URL');
+    const wpUser = this.configService.get<string>('WP_USERNAME');
+    const wpAppPass = this.configService.get<string>('WP_APP_PASSWORD');
+
+    if (!url || !wpUser || !wpAppPass || wpUser.includes('xxx')) {
+      throw new Error('Chưa cấu hình WP_USERNAME / WP_APP_PASSWORD trong file .env');
+    }
+
+    const authHeader = 'Basic ' + Buffer.from(wpUser + ':' + wpAppPass).toString('base64');
+
+    const existingId = await this.checkPostExistsOnWp(product.name, wpUser, wpAppPass, url);
+    if (existingId) {
+      this.logger.warn(`⏭️  Bỏ qua push — Bài viết "${product.name}" đã có trên WP (ID: ${existingId}).`);
+      return { id: existingId, alreadyExists: true, name: product.name };
+    }
+
+    this.logger.log(`Tải lên hình ảnh đại diện (featured image)...`);
+    let featuredMediaId: number | null = null;
+    if (product.images.length > 0) {
+       featuredMediaId = await this.uploadImageToWP(product.images[0]);
+    }
+
+    let categoryIds: number[] = [];
+    if (product.category && product.category !== 'Chưa Phân Loại' && !product.category.includes('Chờ AI')) {
+        const catId = await this.resolveWpCategoryForPost(product.category, wpUser, wpAppPass, url);
+        if (catId) categoryIds.push(catId);
+    }
+
+    // Embed remaining images into content if desired. Here we just use SEO optimized text.
+    let content = product.seoOptimizedDescription || product.fullDescription;
+    
+    // Convert newlines to paragraphs for basic formatting if it doesn't have HTML tags
+    if (!content.includes('<p>') && !content.includes('<br')) {
+        content = content.split('\n').filter(p => p.trim() !== '').map(p => `<p>${p}</p>`).join('');
+    }
+
+    const meta: Record<string, string> = {
+        rank_math_robots: 'index,follow'
+    };
+    if (product.rankMathTitle) meta.rank_math_title = product.rankMathTitle;
+    if (product.rankMathDescription) meta.rank_math_description = product.rankMathDescription;
+    if (product.rankMathFocusKeyword) meta.rank_math_focus_keyword = product.rankMathFocusKeyword;
+
+    const payload: any = {
+      title: product.name,
+      content: content,
+      status: 'publish',
+      meta: meta
+    };
+
+    if (categoryIds.length > 0) payload.categories = categoryIds;
+    if (featuredMediaId) payload.featured_media = featuredMediaId;
+
+    const endpoint = `${url.replace(/\/$/, '')}/wp-json/wp/v2/posts`;
+    this.logger.log(`Calling WP Post API: POST ${endpoint}`);
+
+    try {
+      const resp = await lastValueFrom(
+        this.httpService.post(endpoint, payload, {
+          headers: {
+             Authorization: authHeader,
+             'Content-Type': 'application/json'
+          }
+        })
+      );
+      this.logger.log(`✅ WP Post trả về mã: ${resp.status}`);
+      return {
+          id: resp.data.id,
+          permalink: resp.data.link
+      };
+    } catch (error) {
+      const errMsg = error.response?.data?.message || error.message;
+      this.logger.error(`❌ Đẩy bài viết lên WordPress thất bại: ${errMsg}`);
+      throw new Error(`Lỗi WP Post: ${errMsg}`);
+    }
+  }
 }

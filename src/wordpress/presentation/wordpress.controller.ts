@@ -3,6 +3,7 @@ import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ApiBody, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { SyncProductToWpCommand } from '../application/commands/sync-product-to-wp.command';
 import { BulkSyncToWpCommand } from '../application/commands/bulk-sync-to-wp.command';
+import { SyncNewsToWpCommand } from '../application/commands/sync-news-to-wp.command';
 import { GetPendingSyncQuery } from '../application/queries/get-pending-sync.query';
 import { BulkSyncDto } from './dto/bulk-sync.dto';
 
@@ -64,6 +65,25 @@ export class WordPressController {
     return this.commandBus.execute(
       new BulkSyncToWpCommand(dto.productIds, dto.concurrency ?? 1)
     );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Sync News
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  @Post('sync-news')
+  @HttpCode(202)
+  @ApiOperation({
+    summary: 'Đẩy TẤT CẢ tin tức chưa sync lên WordPress (Posts)',
+    description:
+      'Quét toàn bộ kho, lọc các bài viết (price = 0) chưa sync hoặc AI đã xử lý xong. ' +
+      'Đẩy lên WP dưới dạng Standard Post (wp/v2/posts) kèm ảnh đại diện và thẻ SEO.',
+  })
+  @ApiBody({ type: BulkSyncDto, required: false })
+  @ApiResponse({ status: 202, description: 'Sync News hoàn tất — trả về bảng kết quả' })
+  async syncNews(@Body() dto?: BulkSyncDto) {
+    this.logger.log(`📨 Nhận lệnh sync-news: ${dto?.productIds?.length ?? 0} IDs`);
+    return this.commandBus.execute(new SyncNewsToWpCommand(dto?.productIds));
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
