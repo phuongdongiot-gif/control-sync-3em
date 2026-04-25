@@ -32,8 +32,14 @@ export class TriggerScrapeNewsHandler implements ICommandHandler<TriggerScrapeNe
         if (data) {
             this.processedUrls.add(links[i]);
             
-            const fallbackDesc = '[AI Llama3 đang phân tích và tối ưu lại ngữ pháp trên tiến trình Worker, vui lòng tải lại JSON sau ít phút...]';
+            // Lược bỏ số điện thoại (chỉ cần bước này cho tin tức, không cần AI)
+            const phoneRegex = /(0[235789]|\+84[235789])([\s\.\-]*\d){8,9}\b/g;
+            const cleanedDescription = data.fullDescription.replace(phoneRegex, '[Đã ẩn SĐT]');
 
+            // Set basic SEO info instead of AI
+            const plainTextDesc = cleanedDescription.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+            const shortDesc = plainTextDesc.substring(0, 155) + (plainTextDesc.length > 155 ? '...' : '');
+            
             const product = this.publisher.mergeObjectContext(
               new Product(
                 String(Date.now() + i), // Unique ID for news since it might overlap with products
@@ -44,22 +50,35 @@ export class TriggerScrapeNewsHandler implements ICommandHandler<TriggerScrapeNe
                 data.descriptionVideos,
                 data.descriptionImages,
                 data.fullDescription,
-                fallbackDesc,
-                '[AI đang soạn short_desc...]',
-                data.category
+                cleanedDescription, // Không dùng AI, set thẳng nội dung đã làm sạch
+                shortDesc,
+                data.category,
+                [data.category, ...this.extractTagsFromTitle(data.name)]
               )
             );
+            
+            product.updateRankMathSeo(data.name, shortDesc, data.category);
 
             await this.productRepo.save(product);
-            product.markAsScraped();
+            // product.markAsScraped(); // BỎ QUA trigger sự kiện để chặn Worker AI chạy cho tin tức
             product.commit();
         }
     }
-    this.logger.log(`TriggerScrapeNewsCommand Hoàn Tất. Đã cào xong ${links.length} bài viết. Event Sourcing đẩy AI luồng nền.`);
+    this.logger.log(`TriggerScrapeNewsCommand Hoàn Tất. Đã cào xong ${links.length} bài viết (Không dùng AI, chỉ lọc SĐT).`);
   }
 
   clearProcessedUrls(): void {
     this.processedUrls.clear();
     this.logger.log('🗑️ Đã xóa cache URL tin tức đã cào.');
+  }
+
+  private extractTagsFromTitle(title: string): string[] {
+    const tags: string[] = [];
+    const lower = title.toLowerCase();
+    const keywords = ['bò viên', 'chả lụa', 'chả cá', 'nước mắm', 'mì sợi', 'giò chả', 'xúc xích', 'thịt', 'đậu nành', 'protein', 'phụ gia'];
+    for (const kw of keywords) {
+      if (lower.includes(kw)) tags.push(kw);
+    }
+    return tags;
   }
 }

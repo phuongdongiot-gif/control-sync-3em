@@ -143,31 +143,42 @@ export class HttpScraperService {
       if (!name) name = detail$('h1').first().text().trim();
 
       const images: string[] = [];
-      const mainImg = detail$('.article-image img').attr('src') || detail$('.blog-item-thumbnail img').attr('src');
+      let mainImg = detail$('.article-image img').attr('src') || detail$('.blog-item-thumbnail img').attr('src');
+      if (!mainImg) {
+          mainImg = detail$('meta[property="og:image"]').attr('content');
+      }
       if (mainImg) images.push(mainImg);
 
       const descContainer = detail$('.rte').first();
 
-      let descriptionText = descContainer.text().trim() || '';
+      // Fix relative image URLs before extracting HTML
+      descContainer.find('img').each((idx, el) => {
+          const src = detail$(el).attr('src');
+          if (src && src.startsWith('/')) {
+              detail$(el).attr('src', 'https://3em.vn' + src);
+          }
+      });
+
+      let descriptionHtml = descContainer.html() || '';
       
       const stopWords = [
         '✨ Liên hệ', 
         'CÔNG TY TNHH BAO BÌ', 
-        'Website: ', 
+        'Website:', 
         'Hotline',
         'Zalo',
         'Ms.Kiều',
         'Mr.Lâm'
       ];
-      
+
       for (const word of stopWords) {
-        if (descriptionText.includes(word)) {
-          descriptionText = descriptionText.split(word)[0].trim();
+        if (descriptionHtml.includes(word)) {
+          descriptionHtml = descriptionHtml.split(word)[0].trim();
         }
       }
 
-      descriptionText = descriptionText.replace(/\n{2,}/g, '\n').replace(/\s{2,}/g, ' ');
-      descriptionText = descriptionText.replace(/09[0-9]{2}[\.\-\s]*[0-9]{3}[\.\-\s]*[0-9]{3}/g, '').trim();
+      // Lược bỏ khoảng trắng thừa
+      descriptionHtml = descriptionHtml.replace(/\n{2,}/g, '\n').trim();
 
       const descriptionVideos: string[] = [];
       descContainer.find('iframe, video').each((idx, el) => {
@@ -197,7 +208,7 @@ export class HttpScraperService {
         images, 
         descriptionVideos, 
         descriptionImages, 
-        fullDescription: descriptionText,
+        fullDescription: descriptionHtml,
         category: breadcrumbCat
       };
     } catch (err) {

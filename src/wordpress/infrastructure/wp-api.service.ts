@@ -334,6 +334,44 @@ export class WpApiService {
     }
   }
 
+  async resolveTagIds(tags: string[]): Promise<number[]> {
+    if (!tags || tags.length === 0) return [];
+    const url = this.configService.get<string>('WP_URL');
+    const wpUser = this.configService.get<string>('WP_USERNAME');
+    const wpAppPass = this.configService.get<string>('WP_APP_PASSWORD');
+    
+    if (!url || !wpUser || !wpAppPass) return [];
+
+    const authHeader = 'Basic ' + Buffer.from(wpUser + ':' + wpAppPass).toString('base64');
+    
+    const tagIds: number[] = [];
+    for (const tagName of tags) {
+      if (!tagName.trim()) continue;
+      try {
+        const checkUrl = `${url.replace(/\/$/, '')}/wp-json/wp/v2/tags?search=${encodeURIComponent(tagName)}`;
+        const checkResp = await lastValueFrom(
+          this.httpService.get(checkUrl, { headers: { Authorization: authHeader } })
+        );
+        const match = checkResp.data.find((t: any) => t.name.toLowerCase() === tagName.toLowerCase());
+        if (match) {
+           tagIds.push(match.id);
+        } else {
+           const createUrl = `${url.replace(/\/$/, '')}/wp-json/wp/v2/tags`;
+           const createResp = await lastValueFrom(
+             this.httpService.post(createUrl, { name: tagName }, { headers: { Authorization: authHeader } })
+           );
+           tagIds.push(createResp.data.id);
+        }
+      } catch (err) {
+         this.logger.error(`❌ Lỗi xử lý tag "${tagName}": ${err.message}`);
+      }
+    }
+    return tagIds;
+  }
+
+  /**
+   * Đẩy bài viết chuẩn (Standard Post) lên WordPress (ví dụ: Tin tức)
+   */
   async pushPostToWordPress(product: Product): Promise<any> {
     const url = this.configService.get<string>('WP_URL');
     const wpUser = this.configService.get<string>('WP_USERNAME');
@@ -363,7 +401,10 @@ export class WpApiService {
         if (catId) categoryIds.push(catId);
     }
 
-    // Embed remaining images into content if desired. Here we just use SEO optimized text.
+    // Embed remaining images into content if desired.    
+    const tagIds = await this.resolveTagIds(product.tags || []);
+    
+    // Xử lý nội dung (lấy description đã tối ưu hoặc fullDescription)
     let content = product.seoOptimizedDescription || product.fullDescription;
     
     // Convert newlines to paragraphs for basic formatting if it doesn't have HTML tags
@@ -386,6 +427,7 @@ export class WpApiService {
     };
 
     if (categoryIds.length > 0) payload.categories = categoryIds;
+    if (tagIds.length > 0) payload.tags = tagIds;
     if (featuredMediaId) payload.featured_media = featuredMediaId;
 
     const endpoint = `${url.replace(/\/$/, '')}/wp-json/wp/v2/posts`;

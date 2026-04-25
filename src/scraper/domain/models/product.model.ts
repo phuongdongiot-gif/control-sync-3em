@@ -23,6 +23,7 @@ export class Product extends AggregateRoot {
     public seoOptimizedDescription: string,
     public shortDescription: string = '',
     public category: string = '',
+    public tags: string[] = [],
   ) {
     super();
   }
