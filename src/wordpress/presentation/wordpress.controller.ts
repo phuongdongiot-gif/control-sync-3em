@@ -74,16 +74,24 @@ export class WordPressController {
   @Post('sync-news')
   @HttpCode(202)
   @ApiOperation({
-    summary: 'Đẩy TẤT CẢ tin tức chưa sync lên WordPress (Posts)',
+    summary: 'Đẩy danh sách tin tức hoặc TẤT CẢ tin tức chưa sync lên WordPress',
     description:
-      'Quét toàn bộ kho, lọc các bài viết (price = 0) chưa sync hoặc AI đã xử lý xong. ' +
-      'Đẩy lên WP dưới dạng Standard Post (wp/v2/posts) kèm ảnh đại diện và thẻ SEO.',
+      'Nếu truyền mảng productIds trong body thì chỉ đẩy các bài đó, nếu rỗng thì đẩy toàn bộ.',
   })
   @ApiBody({ type: BulkSyncDto, required: false })
   @ApiResponse({ status: 202, description: 'Sync News hoàn tất — trả về bảng kết quả' })
   async syncNews(@Body() dto?: BulkSyncDto) {
     this.logger.log(`📨 Nhận lệnh sync-news: ${dto?.productIds?.length ?? 0} IDs`);
     return this.commandBus.execute(new SyncNewsToWpCommand(dto?.productIds));
+  }
+
+  @Post('sync-news/:newsId')
+  @ApiOperation({ summary: 'Đẩy một bài tin tức cụ thể lên WordPress (đồng bộ, chờ kết quả)' })
+  @ApiParam({ name: 'newsId', description: 'ID bài viết lấy từ danh sách' })
+  @ApiResponse({ status: 201, description: 'Đã đẩy bài viết thành công lên WordPress' })
+  async syncOneNews(@Param('newsId') newsId: string) {
+    if (!newsId) throw new BadRequestException('newsId là bắt buộc.');
+    return this.commandBus.execute(new SyncNewsToWpCommand([newsId]));
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
