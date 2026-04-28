@@ -83,7 +83,8 @@ export class BulkSyncToWpHandler implements ICommandHandler<BulkSyncToWpCommand>
         continue;
       }
 
-      // Kiểm tra AI đã xử lý xong chưa
+      // Tạm thời bỏ qua kiểm tra AI theo yêu cầu
+      /*
       if (
         product.seoOptimizedDescription?.startsWith('[AI') ||
         product.seoOptimizedDescription?.startsWith('[AI đang')
@@ -98,6 +99,7 @@ export class BulkSyncToWpHandler implements ICommandHandler<BulkSyncToWpCommand>
         skippedCount++;
         continue;
       }
+      */
 
       try {
         this.logger.log(`${progress} 📤 Đang đẩy: "${product.name}"...`);

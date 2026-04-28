@@ -76,6 +76,8 @@ export class SyncNewsToWpHandler implements ICommandHandler<SyncNewsToWpCommand>
         continue;
       }
 
+      // Tạm thời bỏ qua kiểm tra AI theo yêu cầu
+      /*
       if (news.seoOptimizedDescription?.startsWith('[AI') || news.seoOptimizedDescription?.startsWith('[AI đang')) {
         this.logger.warn(`${progress} ⏳ Bỏ qua "${news.name}" — AI vẫn đang xử lý nội dung.`);
         results.push({
@@ -87,6 +89,7 @@ export class SyncNewsToWpHandler implements ICommandHandler<SyncNewsToWpCommand>
         skippedCount++;
         continue;
       }
+      */
 
       try {
         this.logger.log(`${progress} 📤 Đang đẩy: "${news.name}"...`);
